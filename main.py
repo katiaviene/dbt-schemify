@@ -1,4 +1,5 @@
 from schema_editor import SchemaEditor
+from dbt_ast import 
 
 editor = SchemaEditor('schema.yml')
 
@@ -15,5 +16,5 @@ reconstructed_schema = editor.gather_to_dict(flattened_data)
 editor.schema_data = reconstructed_schema
 
 # Write back to the file
-editor.write_schema()
+# editor.write_schema()
 
