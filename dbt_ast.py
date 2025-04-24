@@ -16,10 +16,15 @@ class ColumnNode(Node):
     _field_types = {}
 
 
+class ConfigNode(Node):
+    _fields = ["enabled", "materialised", "tags"]
+    _field_types = {}
+
 class ModelNode(Node):
-    _fields = ["name", "description", "columns"]
+    _fields = ["name", "description", "columns", "config"]
     _field_types = {
         "columns": ColumnNode,
+        "config": ConfigNode
     }
 
 

@@ -1,7 +1,5 @@
 import yaml
-from collections import defaultdict
 import time
-from dbt_ast import ColumnNode, ModelNode, SchemaNode
 
 
 
