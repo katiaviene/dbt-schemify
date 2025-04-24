@@ -1,72 +1,54 @@
 version: 2
 
 models:
-  - name: orders
-    description: "A table containing order data"
+  - name: my_model
+    description: "A comprehensive example model"
+    meta:
+      owner: "data_team"
+      team: "analytics"
+      project: "customer_segmentation"
     config:
-      enabled: true
       materialized: table
-      tags: ['sales', 'transactions']
-      # Additional configuration options for dbt model behavior
+      schema: analytics
+      database: warehouse
+      alias: my_model_alias
+      enabled: true
+      tags: ["core", "important"]
+      persist_docs:
+        relation: true
+        columns: true
+      contract:
+        enforced: true
+      full_refresh: true
+      pre-hook:
+        - "{{ log('Pre-hook running') }}"
+      post-hook:
+        - "{{ log('Post-hook running') }}"
+    data_tests:
+      - name: assert_row_count
+        config:
+          severity: error
+          error_if: "> 10"
+          warn_if: "> 5"
     columns:
-      - name: order_id
-        description: "Unique identifier for each order"
-        data_type: integer
-        tests:
-          - unique
-          - not_null
-      - name: customer_id
-        description: "ID of the customer who placed the order"
-        data_type: integer
-        tests:
-          - not_null
-          - relationships:
-              to: ref('customers')
-              field: customer_id
-      - name: order_date
-        description: "The date when the order was placed"
-        data_type: date
-        tests:
+      - name: user_id
+        description: "User ID from the source table"
+        meta:
+          pii: true
+          sensitivity: high
+        data_tests:
+          - not_null:
+              severity: warn
+          - unique:
+              severity: error
+      - name: signup_date
+        description: "The date the user signed up"
+        meta:
+          pii: false
+        data_tests:
           - not_null
           - accepted_values:
-              values: ["2021", "2022", "2023"]
-      - name: total_amount
-        description: "Total amount for the order"
-        data_type: decimal
-        tests:
-          - not_null
-          - numeric
-          - check:
-              condition: "total_amount > 0"
-
-  - name: customers
-    description: "A table containing customer information"
-    config:
-      enabled: true
-      materialized: table
-      tags: ['customers', 'CRM']
-    columns:
-      - name: customer_id
-        description: "Unique identifier for each customer"
-        data_type: integer
-        tests:
-          - unique
-          - not_null
-      - name: first_name
-        description: "First name of the customer"
-        data_type: string
-        tests:
-          - not_null
-      - name: last_name
-        description: "Last name of the customer"
-        data_type: string
-        tests:
-          - not_null
-      - name: email
-        description: "Email address of the customer"
-        data_type: string
-        tests:
-          - unique
-          - not_null
-          - accepted_values:
-              values: ["example.com", "company.com"]
+              values: ['2022-01-01', '2022-01-02']
+              severity: warn
+    docs:
+      show: true

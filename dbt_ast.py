@@ -11,20 +11,22 @@ class Node:
         return f"{self.__class__.__name__}({fields})"
 
 
+    
 class ColumnNode(Node):
-    _fields = ["name", "description", "tests"]
-    _field_types = {}
-
+    _fields = ["name", "data_type", "description", "meta", "data_tests", "config"]
+    _field_types = {
+    }
 
 class ConfigNode(Node):
-    _fields = ["enabled", "materialised", "tags"]
+    _fields = ["enabled", "materialized", "tags", "schema", "database", "alias", "persist_docs", "contract", "full_refresh", "pre-hook", "post-hook"]
     _field_types = {}
 
 class ModelNode(Node):
-    _fields = ["name", "description", "columns", "config"]
+    _fields = ["name", "description", "meta", "config", "data_tests",  "columns", "docs"]
     _field_types = {
-        "columns": ColumnNode,
-        "config": ConfigNode
+        "config": ConfigNode,
+        "columns": ColumnNode
+        
     }
 
 
