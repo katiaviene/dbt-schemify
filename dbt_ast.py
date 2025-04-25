@@ -26,12 +26,44 @@ class ModelNode(Node):
     _field_types = {
         "config": ConfigNode,
         "columns": ColumnNode
-        
+
     }
-
-
 class SchemaNode(Node):
     _fields = ["version", "models"]
     _field_types = {
         "models": ModelNode,
     }
+
+class NodeVisitor:
+    def visit(self, node):
+        """Visit the node."""
+        method_name = f"visit_{node.__class__.__name__}"
+        visitor = getattr(self, method_name, self.generic_visit)
+        return visitor(node)
+
+    def generic_visit(self, node):
+        """Visit all the child nodes."""
+        for child_name, child in node.__dict__.items():
+            if isinstance(child, Node):
+                self.visit(child)
+            elif isinstance(child, list):
+                for item in child:
+                    if isinstance(item, Node):
+                        self.visit(item)
+
+class NodeTransformer:
+    def transform(self, node):
+        """Transform the node."""
+        method_name = f"transform_{node.__class__.__name__}"
+        transformer = getattr(self, method_name, self.generic_transform)
+        return transformer(node)
+
+    def generic_transform(self, node):
+        """Transform all the child nodes."""
+        for child_name, child in node.__dict__.items():
+            if isinstance(child, Node):
+                self.transform(child)
+            elif isinstance(child, list):
+                for item in child:
+                    if isinstance(item, Node):
+                        self.transform(item)
