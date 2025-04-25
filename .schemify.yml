@@ -1,10 +1,14 @@
+version: '1.0'
 models:
-    meta:
-      owner: "data_team"
-      team: "analytics"
-      project: "customer_segmentation"
-    config:
-      materialized: table
-      schema: analytics
+  - name: null
+    description: null
+    data_tests: null
+    meta: 
+      owner: analytics
     columns:
-      description
+      - name: null
+        data_type: null
+        description: null
+        data_tests: null
+        meta:
+          gdpr_tags: null

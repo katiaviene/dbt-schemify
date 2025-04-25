@@ -1,14 +1,24 @@
 from schema_editor import SchemaEditor
 from dbt_ast import SchemaNode
 from transformation import SchemaTransformer
+from generate import generate_default_schema
 
 editor = SchemaEditor('schema.yml')
 data = editor.read_schema()
 ast = editor.build_node(SchemaNode, data)
-# Initialize the transformer
+
 transformer = SchemaTransformer()
-
-# Transform the root schema node
 transformer.transform(ast)
-
+new_dict = editor.node_to_dict(ast)
+editor.schema_data = new_dict
 print(ast)
+
+editor.write_schema()
+# default = generate_default_schema()
+
+# editor_2 = SchemaEditor('.schemify.yml')
+# default = editor_2.node_to_dict(default)
+# editor_2.schema_data = default
+# editor_2.write_schema()
+
+# print(default)

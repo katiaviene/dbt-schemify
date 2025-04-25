@@ -1,15 +1,36 @@
 from dbt_ast import NodeTransformer
-# Create a Transformer class that defines how to modify the nodes
+from schema_editor import SchemaEditor
+from dbt_ast import SchemaNode, ModelNode, ColumnNode
+
+editor = SchemaEditor('.schemify.yml')
+data = editor.read_schema()
+template = editor.build_node(SchemaNode, data)
+
+
 class SchemaTransformer(NodeTransformer):
-    def transform_ModelNode(self, node):
-        # Modify the model description
-        if node.description:
-            node.description = node.description.lower()
+    
+    def transform(self, node):
+        """Transform the node and check for missing fields from the template."""
+        if isinstance(node, ModelNode):
+            self._apply_model_fields(node)
+        elif isinstance(node, ColumnNode):
+            self._apply_column_fields(node)
         self.generic_transform(node)
 
-    def transform_ColumnNode(self, node):
-        # Modify the column data type
-        if node.description:
-            node.description = node.description.lower()
-        self.generic_transform(node)
+    def _apply_model_fields(self, node):
+        """Check and add missing fields for ModelNode."""
+        required_fields = template.models[0].__dict__.items()
+        
+        for field, value in required_fields:
+            if not hasattr(node, field)or getattr(node, field) is None:
+                print(f"Adding missing field: {field} to ModelNode")
+                setattr(node, field, value or "None")
+
+    def _apply_column_fields(self, node):
+        """Check and add missing fields for ColumnNode."""
+        required_fields = template.models[0].columns[0].__dict__.items()
+        for field, value in required_fields:
+            if not hasattr(node, field) or getattr(node, field) is None:
+                print(f"Adding missing field: {field} to ColumnNode")
+                setattr(node, field, value or "None")
 

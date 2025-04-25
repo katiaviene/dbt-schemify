@@ -1,6 +1,6 @@
 import yaml
 import time
-
+from dbt_ast import Node
 
 
 class CustomDumper(yaml.Dumper):
@@ -45,6 +45,19 @@ class SchemaEditor:
             fields[field] = value
 
         return cls(**fields)
+    
+    def node_to_dict(self, node):
+        """Convert a Node object to a dictionary."""
+        node_dict = {}
+        for field in node._fields:
+            value = getattr(node, field)
+            if isinstance(value, list):
+                node_dict[field] = [self.node_to_dict(item) if isinstance(item, Node) else item for item in value]
+            elif isinstance(value, Node):
+                node_dict[field] = self.node_to_dict(value)
+            else:
+                node_dict[field] = value
+        return node_dict
 
     def write_schema(self):
         """Writes the modified schema back to the file using custom dumper."""
