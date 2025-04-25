@@ -6,7 +6,7 @@ def generate_default_schema():
     column1 = DefaultColumnNode()
     model = DefaultModelNode( columns=[column1])
     schema = DefaultSchemaNode(version="1.0", models=[model])
-
+    print(schema)
     return schema
 
 def node_to_dict(node):

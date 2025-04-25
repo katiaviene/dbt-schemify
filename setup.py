@@ -23,7 +23,7 @@ class PostInstallCommand(install):
 
 
 setup(
-    name='your-package-name',
+    name='dbt-schemify',
     version='0.1',
     packages=find_packages(),
     install_requires=[
