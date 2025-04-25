@@ -1,19 +1,14 @@
 version: 2
 models:
   - name: my_model
-    description: null
-    meta:
-      owner: analytics
-    data_tests: null
+
     columns:
       - name: user_id
-        data_type: null
-        description: null
-        meta: &id001
-          gdpr_tags: schemify
-        data_tests: null
+
       - name: signup_date
-        data_type: null
-        description: null
-        meta: *id001
-        data_tests: null
+
+  - name: another_model
+
+    columns:
+      - name: whatever
+

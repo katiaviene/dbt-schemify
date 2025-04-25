@@ -10,8 +10,8 @@ ast = editor.build_node(SchemaNode, data)
 transformer = SchemaTransformer()
 transformer.transform(ast)
 new_dict = editor.node_to_dict(ast)
+print(new_dict)
 editor.schema_data = new_dict
-print(ast)
 
 editor.write_schema()
 # default = generate_default_schema()

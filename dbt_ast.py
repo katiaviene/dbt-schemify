@@ -10,11 +10,6 @@ class Node:
         fields = ", ".join(f"{f}={repr(getattr(self, f))}" for f in self._fields)
         return f"{self.__class__.__name__}({fields})"
 
-class DefaultColumnNode(Node):
-    _fields = ["name", "data_type", "description", "data_tests"]
-    _field_types = {
-    }
-
 
 class ColumnNode(Node):
     _fields = ["name", "data_type", "description", "meta", "data_tests", "config"]
@@ -26,12 +21,7 @@ class ConfigNode(Node):
     _fields = ["enabled", "materialized", "tags", "schema", "database", "alias", "persist_docs", "contract", "full_refresh", "pre-hook", "post-hook"]
     _field_types = {}
 
-class DefaultModelNode(Node):
-    _fields = ["name", "description",  "data_tests",  "columns"]
-    _field_types = {
-        "columns": DefaultColumnNode
-    }
-    
+
 class ModelNode(Node):
     _fields = ["name", "description", "meta", "config", "data_tests",  "columns", "docs"]
     _field_types = {
@@ -40,6 +30,17 @@ class ModelNode(Node):
 
     }
     
+class DefaultColumnNode(Node):
+    _fields = ["name", "data_type", "description", "data_tests"]
+    _field_types = {
+    }
+
+class DefaultModelNode(Node):
+    _fields = ["name", "description",  "data_tests",  "columns"]
+    _field_types = {
+        "columns": DefaultColumnNode
+    }
+     
 class DefaultSchemaNode(Node):
     _fields = ["version", "models"]
     _field_types = {
@@ -52,7 +53,6 @@ class SchemaNode(Node):
         "models": ModelNode 
     }
     
-
 class NodeVisitor:
     def visit(self, node):
         """Visit the node."""

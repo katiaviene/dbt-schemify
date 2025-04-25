@@ -6,8 +6,8 @@ from dbt_ast import Node
 class CustomDumper(yaml.Dumper):
     def increase_indent(self, flow = False, indentless = False):
         return super().increase_indent(flow, False)
-
- 
+    def ignore_aliases(self, data):
+        return True
 
 class SchemaEditor:
     def __init__(self, schema_path):
@@ -63,4 +63,4 @@ class SchemaEditor:
     def write_schema(self):
         """Writes the modified schema back to the file using custom dumper."""
         with open(self.schema_path, 'w+', encoding='utf-8') as f:
-            yaml.dump(self.schema_data, f, default_flow_style=False, Dumper=CustomDumper, sort_keys=False)
+            yaml.dump(self.schema_data, f, default_flow_style=False, Dumper=CustomDumper, sort_keys=False,  allow_unicode=True, default_style=None)
