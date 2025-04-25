@@ -1,6 +1,6 @@
 import yaml
 import time
-from dbt_ast import Node
+from dbt_schemify.dbt_schemify.dbt_ast import Node
 
 
 class CustomDumper(yaml.Dumper):

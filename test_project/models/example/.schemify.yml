@@ -1,0 +1,14 @@
+version: '1.0'
+models:
+  - name: schemify
+    description: schemify
+    data_tests: schemify
+    meta: 
+      owner: analytics
+    columns:
+      - name: schemify
+        data_type: schemify
+        description: schemify
+        data_tests: schemify
+        meta:
+          gdpr_tags: schemify
