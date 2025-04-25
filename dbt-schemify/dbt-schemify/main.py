@@ -14,11 +14,3 @@ print(new_dict)
 editor.schema_data = new_dict
 
 editor.write_schema()
-# default = generate_default_schema()
-
-# editor_2 = SchemaEditor('.schemify.yml')
-# default = editor_2.node_to_dict(default)
-# editor_2.schema_data = default
-# editor_2.write_schema()
-
-# print(default)
