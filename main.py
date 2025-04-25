@@ -3,7 +3,7 @@ from dbt_ast import SchemaNode
 from transformation import SchemaTransformer
 from generate import generate_default_schema
 
-editor = SchemaEditor('schema.yml')
+editor = SchemaEditor('empty_schema.yml')
 data = editor.read_schema()
 ast = editor.build_node(SchemaNode, data)
 

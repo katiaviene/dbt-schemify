@@ -6,7 +6,6 @@ editor = SchemaEditor('.schemify.yml')
 data = editor.read_schema()
 template = editor.build_node(SchemaNode, data)
 
-
 class SchemaTransformer(NodeTransformer):
     
     def transform(self, node):
@@ -22,15 +21,16 @@ class SchemaTransformer(NodeTransformer):
         required_fields = template.models[0].__dict__.items()
         
         for field, value in required_fields:
-            if not hasattr(node, field)or getattr(node, field) is None:
-                print(f"Adding missing field: {field} to ModelNode")
-                setattr(node, field, value or "None")
+                if not hasattr(node, field)or getattr(node, field) is None:
+                    print(f"Adding missing field: {field} to ModelNode value {value}")
+                    setattr(node, field, value)
 
     def _apply_column_fields(self, node):
         """Check and add missing fields for ColumnNode."""
         required_fields = template.models[0].columns[0].__dict__.items()
         for field, value in required_fields:
-            if not hasattr(node, field) or getattr(node, field) is None:
-                print(f"Adding missing field: {field} to ColumnNode")
-                setattr(node, field, value or "None")
+            if value:
+                if not hasattr(node, field) or getattr(node, field) is None :
+                    print(f"Adding missing field: {field} to ColumnNode value {value}")
+                    setattr(node, field, value)
 

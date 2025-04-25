@@ -1,14 +1,14 @@
 version: '1.0'
 models:
-  - name: null
-    description: null
-    data_tests: null
+  - name: schemify
+    description: schemify
+    data_tests: schemify
     meta: 
       owner: analytics
     columns:
-      - name: null
-        data_type: null
-        description: null
-        data_tests: null
+      - name: schemify
+        data_type: schemify
+        description: schemify
+        data_tests: schemify
         meta:
-          gdpr_tags: null
+          gdpr_tags: schemify
