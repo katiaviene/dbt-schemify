@@ -1,4 +1,4 @@
-{
+--{
     "metadata": {
         "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
         "dbt_version": "1.9.1",
