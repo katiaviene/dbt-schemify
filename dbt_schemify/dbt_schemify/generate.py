@@ -1,5 +1,5 @@
-from dbt_schemify.dbt_schemify.dbt_ast import DefaultColumnNode, DefaultModelNode, DefaultSchemaNode, Node
-from dbt_schemify.dbt_schemify.schema_editor import CustomDumper
+from dbt_ast import DefaultColumnNode, DefaultModelNode, DefaultSchemaNode, Node
+from schema_editor import CustomDumper
 import yaml
 
 def generate_default_schema():

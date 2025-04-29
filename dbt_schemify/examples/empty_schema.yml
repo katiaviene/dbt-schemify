@@ -1,14 +1,9 @@
 version: 2
 models:
   - name: my_model
-
     columns:
       - name: user_id
-
       - name: signup_date
-
   - name: another_model
-
     columns:
       - name: whatever
-

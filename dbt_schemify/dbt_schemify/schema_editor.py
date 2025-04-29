@@ -1,6 +1,7 @@
 import yaml
 import time
-from dbt_schemify.dbt_schemify.dbt_ast import Node
+from dbt_ast import Node
+import json
 
 
 class CustomDumper(yaml.Dumper):
@@ -23,6 +24,19 @@ class SchemaEditor:
             print(f"Warning: {self.schema_path} not found. Creating a new schema.")
             self.schema_data = {}
         return self.schema_data
+
+    def read_manifest(self, manifest_path):
+        try: 
+            with open(manifest_path, 'r') as f:
+                self.schema_data = json.load(f)
+        except FileNotFoundError:
+            print(f"Warning: manifest not found")
+            self.schema_data = {}
+        return self.schema_data
+
+
+
+
 
     def build_node(self, cls, data):
         if not isinstance(data, dict):
