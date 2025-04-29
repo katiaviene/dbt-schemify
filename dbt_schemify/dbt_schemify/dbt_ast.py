@@ -4,7 +4,24 @@ class Node:
 
     def __init__(self, **kwargs):
         for key in self._fields:
-            setattr(self, key, kwargs.get(key))
+            value = kwargs.get(key)
+            type_hint = self._field_types.get(key)
+
+            if type_hint:
+                if isinstance(value, list):
+                    # Convert each item to the type_hint class
+                    setattr(self, key, [type_hint(**v) if isinstance(v, dict) else v for v in value])
+                elif isinstance(value, dict):
+                    if all(isinstance(v, dict) for v in value.values()):
+                        # Skip the keys and just use the values
+                        setattr(self, key, [type_hint(**v) for v in value.values()])
+                    else:
+                        # Single nested object
+                        setattr(self, key, type_hint(**value))
+                else:
+                    setattr(self, key, value)
+            else:
+                setattr(self, key, value)
 
     def __repr__(self):
         fields = ", ".join(f"{f}={repr(getattr(self, f))}" for f in self._fields)
@@ -53,6 +70,12 @@ class SchemaNode(Node):
         "models": ModelNode 
     }
     
+class ManifestNode(Node):
+    _fields = ["nodes"]
+    _field_types = {
+        "nodes": ModelNode 
+    }
+
 class NodeVisitor:
     def visit(self, node):
         """Visit the node."""
