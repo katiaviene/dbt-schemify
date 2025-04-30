@@ -1,0 +1,5 @@
+template, manifest, existing schema
+read existing schema, 
+read template if no template set default ast.
+read manifest. 
+update only those that is in template.

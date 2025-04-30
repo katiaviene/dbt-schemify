@@ -1,10 +1,13 @@
 from dbt_ast import NodeTransformer
 from schema_editor import SchemaEditor
-from dbt_ast import SchemaNode, ModelNode, ColumnNode
+from dbt_ast import SchemaNode, ModelNode, ColumnNode, ManifestNode
 
-editor = SchemaEditor('.schemify.yml')
+editor = SchemaEditor('dbt_schemify/examples/.schemify.yml')
 data = editor.read_schema()
 template = editor.build_node(SchemaNode, data)
+manifest = editor.read_manifest('dbt_schemify/examples/manifest.json')
+manifest_ast = ManifestNode(**data)
+
 
 class SchemaTransformer(NodeTransformer):
     
@@ -19,7 +22,6 @@ class SchemaTransformer(NodeTransformer):
     def _apply_model_fields(self, node):
         """Check and add missing fields for ModelNode."""
         required_fields = template.models[0].__dict__.items()
-        
         for field, value in required_fields:
                 if not hasattr(node, field)or getattr(node, field) is None:
                     print(f"Adding missing field: {field} to ModelNode value {value}")

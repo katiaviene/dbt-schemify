@@ -9,6 +9,7 @@ data = editor.read_manifest('dbt_schemify/examples/manifest.json')
 ast_schema = editor.build_node(SchemaNode, schema)
 ast = ManifestNode(**data)
 print(ast_schema)
+print(ast)
 
 
 
