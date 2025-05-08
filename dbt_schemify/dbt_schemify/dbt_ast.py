@@ -33,11 +33,9 @@ class ColumnNode(Node):
     _field_types = {
     }
 
-
 class ConfigNode(Node):
     _fields = ["enabled", "materialized", "tags", "schema", "database", "alias", "persist_docs", "contract", "full_refresh", "pre-hook", "post-hook"]
     _field_types = {}
-
 
 class ModelNode(Node):
     _fields = ["name", "description", "meta", "config", "data_tests",  "columns", "docs"]

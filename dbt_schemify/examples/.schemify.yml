@@ -3,6 +3,9 @@ models:
   - name: schemify
     description: schemify
     data_tests: schemify
+    config:
+      enabled: true
+      alias: schemify
     meta: 
       owner: analytics
     columns:

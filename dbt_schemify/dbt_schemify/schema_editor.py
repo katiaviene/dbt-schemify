@@ -35,9 +35,6 @@ class SchemaEditor:
         return self.schema_data
 
 
-
-
-
     def build_node(self, cls, data):
         if not isinstance(data, dict):
             return data
