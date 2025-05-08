@@ -8,15 +8,15 @@ schema = editor.read_schema()
 data = editor.read_manifest('dbt_schemify/examples/manifest.json')
 ast_schema = editor.build_node(SchemaNode, schema)
 ast = ManifestNode(**data)
-print(ast_schema)
-print(ast)
+# print(ast_schema)
+# print(ast)
 
 
 
-# transformer = SchemaTransformer()
-# transformer.transform(ast)
-# new_dict = editor.node_to_dict(ast)
+transformer = SchemaTransformer()
+transformer.transform(ast_schema)
+new_dict = editor.node_to_dict(ast_schema)
 # print(new_dict)
-# editor.schema_data = new_dict
+editor.schema_data = new_dict
 
-# editor.write_schema()
+editor.write_schema()

@@ -9,6 +9,5 @@ models:
       - name: schemify
         data_type: schemify
         description: schemify
-        data_tests: schemify
         meta:
           gdpr_tags: schemify
