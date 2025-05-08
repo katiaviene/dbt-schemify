@@ -1,54 +1,7 @@
 version: 2
 
 models:
-  - name: my_model
-    description: "A comprehensive example model"
-    meta:
-      owner: "data_team"
-      team: "analytics"
-      project: "customer_segmentation"
-    config:
-      materialized: table
-      schema: analytics
-      database: warehouse
-      alias: my_model_alias
-      enabled: true
-      tags: ["core", "important"]
-      persist_docs:
-        relation: true
-        columns: true
-      contract:
-        enforced: true
-      full_refresh: true
-      pre-hook:
-        - "{{ log('Pre-hook running') }}"
-      post-hook:
-        - "{{ log('Post-hook running') }}"
-    data_tests:
-      - name: assert_row_count
-        config:
-          severity: error
-          error_if: "> 10"
-          warn_if: "> 5"
-    columns:
-      - name: user_id
-        description: "User ID from the source table"
-        meta:
-          pii: true
-          sensitivity: high
-        data_tests:
-          - not_null:
-              severity: warn
-          - unique:
-              severity: error
-      - name: signup_date
-        description: "The date the user signed up"
-        meta:
-          pii: false
-        data_tests:
-          - not_null
-          - accepted_values:
-              values: ['2022-01-01', '2022-01-02']
-              severity: warn
+  - name: ccdf_xtra_ps_fokus_x__abt_xtra_main_product_change
+  - name: ccdf_xtra_ps_fokus_x__abt_xtra_extended_subscriber
     docs:
       show: true
