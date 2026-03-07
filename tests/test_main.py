@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from dbt_schemify.main import _apply_selector, _group_nodes_by_dir
+from dbt_schemify.main import _apply_selector, _group_nodes_by_dir, _group_nodes_by_model
 
 
 def _node(name, tags=None, original_file_path=None):
@@ -107,4 +107,44 @@ class TestGroupNodesByDir:
     def test_node_without_original_file_path_skipped(self):
         nodes = [{'name': 'broken', 'tags': []}]  # no original_file_path
         groups = _group_nodes_by_dir(nodes, project_dir='.')
+        assert len(groups) == 0
+
+
+# ---------------------------------------------------------------------------
+# _group_nodes_by_model
+# ---------------------------------------------------------------------------
+
+class TestGroupNodesByModel:
+    def test_each_model_gets_own_file(self):
+        nodes = [
+            _node('orders', original_file_path='models/marketing/orders.sql'),
+            _node('campaigns', original_file_path='models/marketing/campaigns.sql'),
+        ]
+        groups = _group_nodes_by_model(nodes, project_dir='.')
+        assert len(groups) == 2
+
+    def test_file_named_after_model(self):
+        nodes = [_node('orders', original_file_path='models/marketing/orders.sql')]
+        groups = _group_nodes_by_model(nodes, project_dir='.')
+        schema_path = next(iter(groups))
+        assert schema_path.name == 'orders.yml'
+
+    def test_file_placed_in_model_directory(self):
+        nodes = [_node('orders', original_file_path='models/marketing/orders.sql')]
+        groups = _group_nodes_by_model(nodes, project_dir='.')
+        schema_path = next(iter(groups))
+        assert schema_path == Path('.') / 'models' / 'marketing' / 'orders.yml'
+
+    def test_each_group_contains_one_node(self):
+        nodes = [
+            _node('orders', original_file_path='models/orders.sql'),
+            _node('customers', original_file_path='models/customers.sql'),
+        ]
+        groups = _group_nodes_by_model(nodes, project_dir='.')
+        for node_list in groups.values():
+            assert len(node_list) == 1
+
+    def test_node_without_original_file_path_skipped(self):
+        nodes = [{'name': 'broken', 'tags': []}]
+        groups = _group_nodes_by_model(nodes, project_dir='.')
         assert len(groups) == 0

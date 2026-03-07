@@ -15,6 +15,7 @@ All options:
   --profiles-dir   DIR    Directory containing profiles.yml (default: ~/.dbt/)
   -s / --select    SELECTOR  Filter models (space-separated). Supports model names and tag:value.
                              Examples: -s my_model   -s tag:marketing   -s tag:finance orders
+  --each                  Write one <model_name>.yml per model instead of one schema.yml per folder
   --no-db                 Skip database connection; no column fetching
 """
 
@@ -81,6 +82,19 @@ def _group_nodes_by_dir(manifest_nodes, project_dir):
     return groups
 
 
+def _group_nodes_by_model(manifest_nodes, project_dir):
+    """One schema file per model: <model_dir>/<model_name>.yml"""
+    groups = {}
+    for node in manifest_nodes:
+        file_path = node.get('original_file_path')
+        if not file_path:
+            print(f"Warning: no original_file_path for model '{node.get('name')}', skipping.", file=sys.stderr)
+            continue
+        schema_path = Path(project_dir) / Path(file_path).parent / f"{node['name']}.yml"
+        groups[schema_path] = [node]
+    return groups
+
+
 def _write_schema(schema_path, nodes, template_model, db_cols_by_model):
     existing_schema = {}
     if schema_path.exists():
@@ -141,6 +155,8 @@ def main():
                         help='Directory containing profiles.yml. Default: ~/.dbt/')
     parser.add_argument('-s', '--select', nargs='+', metavar='SELECTOR',
                         help='Filter models. Supports model names and tag:value (e.g. -s tag:marketing orders).')
+    parser.add_argument('--each', action='store_true',
+                        help='Write one <model_name>.yml per model instead of one schema.yml per folder.')
     parser.add_argument('--no-db', action='store_true',
                         help='Skip database connection and column fetching.')
 
@@ -201,8 +217,16 @@ def main():
     if args.schema:
         # Explicit output file — all selected models into one schema.yml
         _write_schema(Path(args.schema), manifest_nodes, template_model, db_cols_by_model)
+    elif args.each:
+        # One <model_name>.yml per model
+        groups = _group_nodes_by_model(manifest_nodes, project_dir)
+        if not groups:
+            print("No models found to process.", file=sys.stderr)
+            sys.exit(1)
+        for schema_path, nodes in groups.items():
+            _write_schema(schema_path, nodes, template_model, db_cols_by_model)
     else:
-        # Auto-discover: one schema.yml per model directory
+        # Default: one schema.yml per model directory
         groups = _group_nodes_by_dir(manifest_nodes, project_dir)
         if not groups:
             print("No models found to process.", file=sys.stderr)

@@ -81,6 +81,7 @@ Options:
   --profiles-dir DIR     Directory containing profiles.yml. Default: ~/.dbt/
   -s / --select          Filter models by name or tag. Space-separated.
                          Examples: -s orders   -s tag:marketing   -s tag:finance orders
+  --each                 Write one <model_name>.yml per model instead of one schema.yml per folder
   --no-db                Skip database connection; no column fetching
 ```
 
@@ -101,6 +102,9 @@ dbt-schemify -s tag:finance orders
 
 # All matching models into one explicit file
 dbt-schemify --schema models/marketing/schema.yml -s tag:marketing
+
+# One file per model named after the model (e.g. orders.yml, customers.yml)
+dbt-schemify --each
 
 # Without DB connection (manifest data only)
 dbt-schemify --no-db
