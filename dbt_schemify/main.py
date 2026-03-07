@@ -420,14 +420,15 @@ def main():
         print("No models found to process.", file=sys.stderr)
         sys.exit(1)
 
-    # --- Confirmation prompt ---
-    print("The following schema files will be created or updated:")
-    for schema_path, nodes in groups.items():
-        model_names = ', '.join(n['name'] for n in nodes)
-        print(f"  {schema_path}  ({model_names})")
-    if not _confirm("Proceed?", auto_yes=args.yes):
-        print("Aborted.")
-        sys.exit(0)
+    # --- Confirmation prompt (only for bare `schemify` with no explicit selection) ---
+    if not args.select and not args.schema:
+        print("The following schema files will be created or updated:")
+        for schema_path, nodes in groups.items():
+            model_names = ', '.join(n['name'] for n in nodes)
+            print(f"  {schema_path}  ({model_names})")
+        if not _confirm("Proceed?", auto_yes=args.yes):
+            print("Aborted.")
+            sys.exit(0)
 
     # --- Pattern conflict check ---
     if mode in ('dir', 'model'):
