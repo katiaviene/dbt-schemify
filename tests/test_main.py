@@ -148,3 +148,30 @@ class TestGroupNodesByModel:
         nodes = [{'name': 'broken', 'tags': []}]
         groups = _group_nodes_by_model(nodes, project_dir='.')
         assert len(groups) == 0
+
+
+# ---------------------------------------------------------------------------
+# Single-model dispatch helper
+# ---------------------------------------------------------------------------
+
+class TestSingleModelDispatch:
+    """When exactly one node is selected, the output file is named after the model."""
+
+    def test_single_node_produces_model_named_file(self):
+        nodes = [_node('orders', original_file_path='models/finance/orders.sql')]
+        # Single model → should use _group_nodes_by_model logic (named file)
+        groups = _group_nodes_by_model(nodes, project_dir='.')
+        assert len(groups) == 1
+        schema_path = next(iter(groups))
+        assert schema_path.name == 'orders.yml'
+        assert schema_path == Path('.') / 'models' / 'finance' / 'orders.yml'
+
+    def test_single_node_vs_multi_dir_differ(self):
+        """Single-node path differs from multi-node default (schema.yml)."""
+        nodes = [_node('orders', original_file_path='models/finance/orders.sql')]
+        by_model = _group_nodes_by_model(nodes, project_dir='.')
+        by_dir = _group_nodes_by_dir(nodes, project_dir='.')
+        model_path = next(iter(by_model))
+        dir_path = next(iter(by_dir))
+        assert model_path.name == 'orders.yml'
+        assert dir_path.name == 'schema.yml'

@@ -35,6 +35,7 @@ bigquery  = ["google-cloud-bigquery"]
 duckdb    = ["duckdb"]
 
 [project.scripts]
+schemify = "dbt_schemify.main:main"
 dbt-schemify = "dbt_schemify.main:main"
 
 [project.urls]

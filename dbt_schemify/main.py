@@ -1,9 +1,9 @@
 """
-dbt-schemify CLI
+schemify CLI
 
 Usage:
-  dbt-schemify                         # auto-discover: writes schema.yml next to each model
-  dbt-schemify --schema path/schema.yml  # explicit: write all selected models into one file
+  schemify                         # auto-discover: writes schema.yml next to each model
+  schemify --schema path/schema.yml  # explicit: write all selected models into one file
 
 All options:
   --schema         PATH   Path to schema.yml to write (optional; default: auto-discover from manifest)
@@ -17,6 +17,7 @@ All options:
                              Examples: -s my_model   -s tag:marketing   -s tag:finance orders
   --each                  Write one <model_name>.yml per model instead of one schema.yml per folder
   --no-db                 Skip database connection; no column fetching
+  --info                  Show resolved paths and configuration, then exit
 """
 
 import argparse
@@ -30,6 +31,21 @@ import yaml
 from dbt_schemify.schema_editor import CustomDumper
 from dbt_schemify.dbt_ast import ModelNode
 from dbt_schemify.transformation import SchemifyTransformer
+
+DEFAULT_TEMPLATE = """\
+version: '1.0'
+models:
+  - name: schemify
+    description: schemify
+    meta:
+      owner: analytics
+    config:
+      enabled: true
+    columns:
+      - name: schemify
+        data_type: schemify
+
+"""
 
 
 def _read_dbt_project(project_dir):
@@ -134,9 +150,18 @@ def _fetch_db_columns(manifest_nodes, config):
     return db_cols
 
 
+def _ensure_template(template_path):
+    """Create a default .schemify.yml if it doesn't exist yet."""
+    template_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(template_path, 'w', encoding='utf-8') as f:
+        f.write(DEFAULT_TEMPLATE)
+    print(f"Created default template at {template_path}")
+    print("Edit it to customise which fields schemify generates, then re-run.")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        prog='dbt-schemify',
+        prog='schemify',
         description='Generate and update dbt schema.yml files.',
     )
     parser.add_argument('--schema',
@@ -159,21 +184,43 @@ def main():
                         help='Write one <model_name>.yml per model instead of one schema.yml per folder.')
     parser.add_argument('--no-db', action='store_true',
                         help='Skip database connection and column fetching.')
+    parser.add_argument('--info', action='store_true',
+                        help='Show resolved paths and configuration, then exit.')
 
     args = parser.parse_args()
-    project_dir = Path(args.project_dir)
+    project_dir = Path(args.project_dir).resolve()
+
+    template_path = Path(args.template).resolve() if args.template else project_dir / '.schemify.yml'
+    manifest_path = Path(args.manifest).resolve() if args.manifest else project_dir / 'target' / 'manifest.json'
+    profiles_dir = Path(args.profiles_dir).resolve() if args.profiles_dir else Path.home() / '.dbt'
+
+    dbt_project = _read_dbt_project(project_dir)
+    profile_name = args.profile or dbt_project.get('profile', '<not set>')
+
+    # --- --info mode ---
+    if args.info:
+        print(f"project-dir  : {project_dir}")
+        print(f"template     : {template_path}  {'(exists)' if template_path.exists() else '(missing)'}")
+        print(f"manifest     : {manifest_path}  {'(exists)' if manifest_path.exists() else '(missing)'}")
+        print(f"profiles-dir : {profiles_dir}  {'(exists)' if profiles_dir.exists() else '(missing)'}")
+        print(f"profile      : {profile_name}")
+        print(f"target       : {args.target or '(default)'}")
+        return
 
     # --- Template ---
-    template_path = Path(args.template) if args.template else project_dir / '.schemify.yml'
     if not template_path.exists():
-        print(f"Error: template not found: {template_path}", file=sys.stderr)
-        print("Create a .schemify.yml in your project root or pass --template.", file=sys.stderr)
-        sys.exit(1)
+        if args.template:
+            # User explicitly pointed at a path that doesn't exist — still an error
+            print(f"Error: template not found: {template_path}", file=sys.stderr)
+            print("Create a .schemify.yml in your project root or pass --template.", file=sys.stderr)
+            sys.exit(1)
+        _ensure_template(template_path)
+        sys.exit(0)
+
     with open(template_path) as f:
         template = yaml.safe_load(f) or {}
 
     # --- Manifest ---
-    manifest_path = Path(args.manifest) if args.manifest else project_dir / 'target' / 'manifest.json'
     if not manifest_path.exists():
         print(
             f"Error: manifest.json not found at {manifest_path}.\n"
@@ -192,10 +239,9 @@ def main():
     # --- DB columns ---
     db_cols_by_model = {}
     if not args.no_db:
-        dbt_project = _read_dbt_project(project_dir)
-        profile_name = args.profile or dbt_project.get('profile')
+        resolved_profile = args.profile or dbt_project.get('profile')
 
-        if not profile_name:
+        if not resolved_profile:
             print(
                 "Warning: no profile name found. Pass --profile or set 'profile' in dbt_project.yml. "
                 "Skipping DB connection.",
@@ -204,8 +250,8 @@ def main():
         else:
             try:
                 from dbt_schemify.db_connector import read_connection_config
-                config = read_connection_config(profile_name, args.target, args.profiles_dir)
-                print(f"Connecting to {config.get('type')} ({profile_name}/{args.target or 'default'})...")
+                config = read_connection_config(resolved_profile, args.target, args.profiles_dir)
+                print(f"Connecting to {config.get('type')} ({resolved_profile}/{args.target or 'default'})...")
                 db_cols_by_model = _fetch_db_columns(manifest_nodes, config)
             except Exception as exc:
                 print(f"Warning: DB connection failed — {exc}", file=sys.stderr)
@@ -217,8 +263,8 @@ def main():
     if args.schema:
         # Explicit output file — all selected models into one schema.yml
         _write_schema(Path(args.schema), manifest_nodes, template_model, db_cols_by_model)
-    elif args.each:
-        # One <model_name>.yml per model
+    elif args.each or len(manifest_nodes) == 1:
+        # One <model_name>.yml per model (explicit --each, or exactly one model selected)
         groups = _group_nodes_by_model(manifest_nodes, project_dir)
         if not groups:
             print("No models found to process.", file=sys.stderr)
