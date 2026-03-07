@@ -32,6 +32,8 @@ from dbt_schemify.schema_editor import CustomDumper
 from dbt_schemify.dbt_ast import ModelNode
 from dbt_schemify.transformation import SchemifyTransformer
 
+CONFIG_FILE = '.schemify-config.yml'
+
 DEFAULT_TEMPLATE = """\
 version: '1.0'
 models:
@@ -45,6 +47,26 @@ models:
       - name: schemify
         data_type: schemify
 
+"""
+
+DEFAULT_CONFIG = """\
+# schemify configuration
+# Values here are used as defaults on every run.
+# Command-line arguments always take priority over this file.
+# Use 'default' for paths/names to let schemify auto-resolve them.
+
+# Output mode
+each: false          # write one <model>.yml per model instead of schema.yml per folder
+no_db: false         # skip database connection; no column fetching
+
+# Paths ('default' = auto-resolved)
+manifest: default    # manifest.json path;      auto: <project-dir>/target/manifest.json
+template: default    # .schemify.yml path;       auto: <project-dir>/.schemify.yml
+profiles_dir: default  # profiles.yml directory; auto: ~/.dbt/
+
+# dbt connection ('default' = auto-resolved)
+profile: default     # dbt profile name;  auto: read from dbt_project.yml
+target: default      # dbt target name;   auto: profile default
 """
 
 
@@ -159,6 +181,31 @@ def _ensure_template(template_path):
     print("Edit it to customise which fields schemify generates, then re-run.")
 
 
+def _load_config(project_dir):
+    """Read .schemify-config.yml from project_dir.
+    Creates it with defaults if missing. Returns dict with 'default' normalised to None.
+    """
+    config_path = Path(project_dir) / CONFIG_FILE
+    if not config_path.exists():
+        with open(config_path, 'w', encoding='utf-8') as f:
+            f.write(DEFAULT_CONFIG)
+        print(f"Created config file at {config_path}")
+        print(f"Review it to set your preferred defaults, then re-run.")
+    with open(config_path) as f:
+        raw = yaml.safe_load(f) or {}
+    # Normalise the 'default' sentinel string to None everywhere
+    return {k: (None if v == 'default' else v) for k, v in raw.items()}
+
+
+def _resolve(cli_val, config_val, hardcoded):
+    """Priority: CLI arg > config file > hardcoded default."""
+    if cli_val is not None:
+        return cli_val
+    if config_val is not None:
+        return config_val
+    return hardcoded
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog='schemify',
@@ -180,9 +227,11 @@ def main():
                         help='Directory containing profiles.yml. Default: ~/.dbt/')
     parser.add_argument('-s', '--select', nargs='+', metavar='SELECTOR',
                         help='Filter models. Supports model names and tag:value (e.g. -s tag:marketing orders).')
-    parser.add_argument('--each', action='store_true',
+    # Use default=None so we can distinguish "user passed this flag" from "not passed"
+    # (needed to let config-file values win when the flag is absent)
+    parser.add_argument('--each', action='store_true', default=None,
                         help='Write one <model_name>.yml per model instead of one schema.yml per folder.')
-    parser.add_argument('--no-db', action='store_true',
+    parser.add_argument('--no-db', action='store_true', default=None,
                         help='Skip database connection and column fetching.')
     parser.add_argument('--info', action='store_true',
                         help='Show resolved paths and configuration, then exit.')
@@ -190,27 +239,42 @@ def main():
     args = parser.parse_args()
     project_dir = Path(args.project_dir).resolve()
 
-    template_path = Path(args.template).resolve() if args.template else project_dir / '.schemify.yml'
-    manifest_path = Path(args.manifest).resolve() if args.manifest else project_dir / 'target' / 'manifest.json'
-    profiles_dir = Path(args.profiles_dir).resolve() if args.profiles_dir else Path.home() / '.dbt'
+    # --- Config file (create if missing, always read) ---
+    cfg = _load_config(project_dir)
 
-    dbt_project = _read_dbt_project(project_dir)
-    profile_name = args.profile or dbt_project.get('profile', '<not set>')
+    # --- Resolve all options: CLI > config > hardcoded default ---
+    each   = _resolve(args.each,       cfg.get('each'),         False)
+    no_db  = _resolve(args.no_db,      cfg.get('no_db'),        False)
+    manifest_arg   = args.manifest    or cfg.get('manifest')    # None → auto
+    template_arg   = args.template    or cfg.get('template')    # None → auto
+    profiles_dir_arg = args.profiles_dir or cfg.get('profiles_dir')  # None → auto
+    profile_arg    = args.profile     or cfg.get('profile')     # None → auto
+    target_arg     = args.target      or cfg.get('target')      # None → auto
+
+    template_path  = Path(template_arg).resolve()  if template_arg   else project_dir / '.schemify.yml'
+    manifest_path  = Path(manifest_arg).resolve()  if manifest_arg   else project_dir / 'target' / 'manifest.json'
+    profiles_dir   = Path(profiles_dir_arg).resolve() if profiles_dir_arg else Path.home() / '.dbt'
+
+    dbt_project  = _read_dbt_project(project_dir)
+    profile_name = profile_arg or dbt_project.get('profile', '<not set>')
 
     # --- --info mode ---
     if args.info:
+        config_path = project_dir / CONFIG_FILE
         print(f"project-dir  : {project_dir}")
+        print(f"config       : {config_path}  {'(exists)' if config_path.exists() else '(missing)'}")
         print(f"template     : {template_path}  {'(exists)' if template_path.exists() else '(missing)'}")
         print(f"manifest     : {manifest_path}  {'(exists)' if manifest_path.exists() else '(missing)'}")
         print(f"profiles-dir : {profiles_dir}  {'(exists)' if profiles_dir.exists() else '(missing)'}")
         print(f"profile      : {profile_name}")
-        print(f"target       : {args.target or '(default)'}")
+        print(f"target       : {target_arg or '(default)'}")
+        print(f"each         : {each}")
+        print(f"no-db        : {no_db}")
         return
 
     # --- Template ---
     if not template_path.exists():
-        if args.template:
-            # User explicitly pointed at a path that doesn't exist — still an error
+        if template_arg:
             print(f"Error: template not found: {template_path}", file=sys.stderr)
             print("Create a .schemify.yml in your project root or pass --template.", file=sys.stderr)
             sys.exit(1)
@@ -238,8 +302,8 @@ def main():
 
     # --- DB columns ---
     db_cols_by_model = {}
-    if not args.no_db:
-        resolved_profile = args.profile or dbt_project.get('profile')
+    if not no_db:
+        resolved_profile = profile_arg or dbt_project.get('profile')
 
         if not resolved_profile:
             print(
@@ -250,9 +314,9 @@ def main():
         else:
             try:
                 from dbt_schemify.db_connector import read_connection_config
-                config = read_connection_config(resolved_profile, args.target, args.profiles_dir)
-                print(f"Connecting to {config.get('type')} ({resolved_profile}/{args.target or 'default'})...")
-                db_cols_by_model = _fetch_db_columns(manifest_nodes, config)
+                db_config = read_connection_config(resolved_profile, target_arg, profiles_dir_arg)
+                print(f"Connecting to {db_config.get('type')} ({resolved_profile}/{target_arg or 'default'})...")
+                db_cols_by_model = _fetch_db_columns(manifest_nodes, db_config)
             except Exception as exc:
                 print(f"Warning: DB connection failed — {exc}", file=sys.stderr)
                 print("Proceeding without column information.", file=sys.stderr)
@@ -263,8 +327,8 @@ def main():
     if args.schema:
         # Explicit output file — all selected models into one schema.yml
         _write_schema(Path(args.schema), manifest_nodes, template_model, db_cols_by_model)
-    elif args.each or len(manifest_nodes) == 1:
-        # One <model_name>.yml per model (explicit --each, or exactly one model selected)
+    elif each or len(manifest_nodes) == 1:
+        # One <model_name>.yml per model (explicit --each / config each:true, or exactly one model selected)
         groups = _group_nodes_by_model(manifest_nodes, project_dir)
         if not groups:
             print("No models found to process.", file=sys.stderr)
