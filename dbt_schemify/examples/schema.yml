@@ -1,7 +1,0 @@
-version: 2
-
-models:
-  - name: ccdf_xtra_ps_fokus_x__abt_xtra_main_product_change
-  - name: ccdf_xtra_ps_fokus_x__abt_xtra_extended_subscriber
-    docs:
-      show: true
