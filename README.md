@@ -29,44 +29,27 @@ pip install "dbt-schemify[duckdb]"
 
 ## Quick start
 
-**1. Create a `.schemify.yml` template** in your dbt project root:
-
-```yaml
-version: '1.0'
-models:
-  - name: schemify
-    description: schemify      # filled from manifest
-    meta:
-      owner: analytics         # static default applied to all models
-    config:
-      enabled: true            # static default
-    columns:
-      - name: schemify
-        data_type: schemify    # filled from DB
-        description: schemify  # left empty for humans to fill in
-        meta:
-          gdpr_tags: schemify
-```
-
-**2. Compile your dbt project** to get a manifest:
+**1. Compile your dbt project** to get a manifest:
 
 ```bash
 dbt compile
 ```
 
-**3. Run dbt-schemify:**
+**2. Run schemify:**
 
 ```bash
-dbt-schemify
+schemify
 ```
 
+If `.schemify.yml` doesn't exist yet, schemify creates one with sensible defaults — edit it, then re-run.
+
 Reads `.schemify.yml`, `target/manifest.json`, and `~/.dbt/profiles.yml` automatically.
-Writes `schema.yml` next to each model's SQL file.
+Writes `schema.yml` next to each model's SQL file (grouped by folder).
 
 ## Usage
 
 ```
-dbt-schemify [options]
+schemify [options]
 
 Options:
   --schema PATH          Write all models into a single schema.yml at PATH.
@@ -83,36 +66,66 @@ Options:
                          Examples: -s orders   -s tag:marketing   -s tag:finance orders
   --each                 Write one <model_name>.yml per model instead of one schema.yml per folder
   --no-db                Skip database connection; no column fetching
+  --info                 Show resolved paths and configuration, then exit
 ```
+
+> `dbt-schemify` also works as an alias for backward compatibility.
 
 ## Examples
 
 ```bash
 # Auto-discover: write schema.yml next to every model's SQL file
-dbt-schemify
+schemify
+
+# Check which paths schemify is using
+schemify --info
 
 # Only models with a specific tag (one schema.yml per directory)
-dbt-schemify -s tag:marketing
+schemify -s tag:marketing
 
 # Only specific models by name
-dbt-schemify -s orders customers
+schemify -s orders customers
+
+# Single model — automatically gets its own <model_name>.yml
+schemify -s orders
 
 # Mix names and tags
-dbt-schemify -s tag:finance orders
+schemify -s tag:finance orders
 
 # All matching models into one explicit file
-dbt-schemify --schema models/marketing/schema.yml -s tag:marketing
+schemify --schema models/marketing/schema.yml -s tag:marketing
 
 # One file per model named after the model (e.g. orders.yml, customers.yml)
-dbt-schemify --each
+schemify --each
 
 # Without DB connection (manifest data only)
-dbt-schemify --no-db
+schemify --no-db
 
 # Custom paths
-dbt-schemify \
+schemify \
   --manifest target/manifest.json \
   --template .schemify.yml
+```
+
+## Default template
+
+If `.schemify.yml` is missing, schemify creates this template automatically:
+
+```yaml
+version: '1.0'
+models:
+  - name: schemify
+    description: schemify      # filled from manifest
+    meta:
+      owner: analytics         # static default applied to all models
+    config:
+      enabled: true            # static default
+    columns:
+      - name: schemify
+        data_type: schemify    # filled from DB
+        description: schemify  # left empty for humans to fill in
+        meta:
+          gdpr_tags: schemify
 ```
 
 ## Merge rules

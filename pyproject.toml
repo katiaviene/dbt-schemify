@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dbt-schemify"
-version = "0.2.0"
+version = "0.3.0"
 description = "Generate and update dbt schema.yml files from a template, manifest, and database"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -35,6 +35,7 @@ bigquery  = ["google-cloud-bigquery"]
 duckdb    = ["duckdb"]
 
 [project.scripts]
+schemify = "dbt_schemify.main:main"
 dbt-schemify = "dbt_schemify.main:main"
 
 [project.urls]

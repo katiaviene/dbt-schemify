@@ -1,6 +1,14 @@
 from pathlib import Path
 
-from dbt_schemify.main import _apply_selector, _group_nodes_by_dir, _group_nodes_by_model
+from dbt_schemify.main import (
+    _apply_selector,
+    _group_nodes_by_dir,
+    _group_nodes_by_model,
+    _load_config,
+    _resolve,
+    CONFIG_FILE,
+    DEFAULT_CONFIG,
+)
 
 
 def _node(name, tags=None, original_file_path=None):
@@ -148,3 +156,99 @@ class TestGroupNodesByModel:
         nodes = [{'name': 'broken', 'tags': []}]
         groups = _group_nodes_by_model(nodes, project_dir='.')
         assert len(groups) == 0
+
+
+# ---------------------------------------------------------------------------
+# Single-model dispatch helper
+# ---------------------------------------------------------------------------
+
+class TestSingleModelDispatch:
+    """When exactly one node is selected, the output file is named after the model."""
+
+    def test_single_node_produces_model_named_file(self):
+        nodes = [_node('orders', original_file_path='models/finance/orders.sql')]
+        # Single model → should use _group_nodes_by_model logic (named file)
+        groups = _group_nodes_by_model(nodes, project_dir='.')
+        assert len(groups) == 1
+        schema_path = next(iter(groups))
+        assert schema_path.name == 'orders.yml'
+        assert schema_path == Path('.') / 'models' / 'finance' / 'orders.yml'
+
+    def test_single_node_vs_multi_dir_differ(self):
+        """Single-node path differs from multi-node default (schema.yml)."""
+        nodes = [_node('orders', original_file_path='models/finance/orders.sql')]
+        by_model = _group_nodes_by_model(nodes, project_dir='.')
+        by_dir = _group_nodes_by_dir(nodes, project_dir='.')
+        model_path = next(iter(by_model))
+        dir_path = next(iter(by_dir))
+        assert model_path.name == 'orders.yml'
+        assert dir_path.name == 'schema.yml'
+
+
+# ---------------------------------------------------------------------------
+# _resolve (CLI > config > hardcoded default)
+# ---------------------------------------------------------------------------
+
+class TestResolve:
+    def test_cli_wins_over_config_and_default(self):
+        assert _resolve('cli', 'cfg', 'default') == 'cli'
+
+    def test_config_wins_over_default_when_cli_is_none(self):
+        assert _resolve(None, 'cfg', 'default') == 'cfg'
+
+    def test_hardcoded_default_used_when_both_none(self):
+        assert _resolve(None, None, 'default') == 'default'
+
+    def test_false_cli_value_not_treated_as_none(self):
+        # False is a valid CLI value (e.g. --each not passed gives None, not False)
+        assert _resolve(False, True, True) is False
+
+    def test_zero_cli_value_not_treated_as_none(self):
+        assert _resolve(0, 99, 99) == 0
+
+
+# ---------------------------------------------------------------------------
+# _load_config
+# ---------------------------------------------------------------------------
+
+class TestLoadConfig:
+    def test_creates_config_file_if_missing(self, tmp_path):
+        cfg = _load_config(tmp_path)
+        assert (tmp_path / CONFIG_FILE).exists()
+        # Returns a dict
+        assert isinstance(cfg, dict)
+
+    def test_created_file_contains_expected_keys(self, tmp_path):
+        _load_config(tmp_path)
+        text = (tmp_path / CONFIG_FILE).read_text()
+        assert 'each' in text
+        assert 'no_db' in text
+        assert 'manifest' in text
+
+    def test_default_sentinel_normalised_to_none(self, tmp_path):
+        cfg = _load_config(tmp_path)
+        # 'default' strings in DEFAULT_CONFIG should become None
+        assert cfg.get('manifest') is None
+        assert cfg.get('profile') is None
+        assert cfg.get('target') is None
+
+    def test_bool_defaults_preserved(self, tmp_path):
+        cfg = _load_config(tmp_path)
+        assert cfg.get('each') is False
+        assert cfg.get('no_db') is False
+
+    def test_reads_existing_config(self, tmp_path):
+        (tmp_path / CONFIG_FILE).write_text('each: true\nno_db: false\n')
+        cfg = _load_config(tmp_path)
+        assert cfg.get('each') is True
+        assert cfg.get('no_db') is False
+
+    def test_custom_value_not_normalised(self, tmp_path):
+        (tmp_path / CONFIG_FILE).write_text('profile: my_profile\n')
+        cfg = _load_config(tmp_path)
+        assert cfg.get('profile') == 'my_profile'
+
+    def test_default_config_content_matches_constant(self, tmp_path):
+        _load_config(tmp_path)
+        written = (tmp_path / CONFIG_FILE).read_text()
+        assert written == DEFAULT_CONFIG
