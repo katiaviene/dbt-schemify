@@ -35,15 +35,23 @@ pip install "dbt-schemify[duckdb]"
 dbt compile
 ```
 
-**2. Run schemify:**
+**2. Initialise schemify** (first time only — creates config and template):
+
+```bash
+schemify --init
+```
+
+This creates two files in your project root:
+- `.schemify-config.yml` — default options for every run (each, no-db, paths, profile…)
+- `.schemify.yml` — template that controls which fields appear in generated schema files
+
+Edit both to match your project, then run:
 
 ```bash
 schemify
 ```
 
-If `.schemify.yml` doesn't exist yet, schemify creates one with sensible defaults — edit it, then re-run.
-
-Reads `.schemify.yml`, `target/manifest.json`, and `~/.dbt/profiles.yml` automatically.
+Reads `.schemify.yml`, `.schemify-config.yml`, `target/manifest.json`, and `~/.dbt/profiles.yml` automatically.
 Writes `schema.yml` next to each model's SQL file (grouped by folder).
 
 ## Usage
@@ -51,7 +59,11 @@ Writes `schema.yml` next to each model's SQL file (grouped by folder).
 ```
 schemify [options]
 
-Options:
+Setup:
+  --init                 Create .schemify-config.yml and .schemify.yml, then exit.
+                         Run this once before using schemify for the first time.
+
+Schema generation:
   --schema PATH          Write all models into a single schema.yml at PATH.
                          If omitted, a schema.yml is created next to each model's SQL file.
   --manifest PATH        Path to manifest.json
@@ -66,19 +78,50 @@ Options:
                          Examples: -s orders   -s tag:marketing   -s tag:finance orders
   --each                 Write one <model_name>.yml per model instead of one schema.yml per folder
   --no-db                Skip database connection; no column fetching
+  -y / --yes             Skip confirmation prompts (useful for CI)
+
+Diagnostics:
   --info                 Show resolved paths and configuration, then exit
+  --debug-db             Show DB connection config (password masked) and test the connection, then exit
 ```
 
 > `dbt-schemify` also works as an alias for backward compatibility.
 
+## Configuration file
+
+`.schemify-config.yml` (created by `schemify --init`) lets you set default options so you don't
+have to repeat them on every run. CLI arguments always override config values.
+
+```yaml
+# Output mode
+each: false          # write one <model>.yml per model instead of schema.yml per folder
+no_db: false         # skip database connection; no column fetching
+
+# Paths ('default' = auto-resolved)
+manifest: default    # manifest.json path;      auto: <project-dir>/target/manifest.json
+template: default    # .schemify.yml path;       auto: <project-dir>/.schemify.yml
+profiles_dir: default  # profiles.yml directory; auto: ~/.dbt/
+
+# dbt connection ('default' = auto-resolved)
+profile: default     # dbt profile name;  auto: read from dbt_project.yml
+target: default      # dbt target name;   auto: profile default
+```
+
 ## Examples
 
 ```bash
+# First-time setup: create config and template files
+schemify --init
+
 # Auto-discover: write schema.yml next to every model's SQL file
+# (asks for confirmation before writing)
 schemify
 
 # Check which paths schemify is using
 schemify --info
+
+# Check DB connection (shows masked config + runs a test query)
+schemify --debug-db
 
 # Only models with a specific tag (one schema.yml per directory)
 schemify -s tag:marketing
@@ -101,15 +144,29 @@ schemify --each
 # Without DB connection (manifest data only)
 schemify --no-db
 
+# Skip confirmation (e.g. in CI)
+schemify --yes
+
 # Custom paths
 schemify \
   --manifest target/manifest.json \
   --template .schemify.yml
 ```
 
+## Confirmation and conflict detection
+
+When you run plain `schemify` (no `--select` or `--schema`), schemify lists all schema
+files it is about to create or update and asks for confirmation before proceeding.
+Pass `-y` / `--yes` to skip this in CI.
+
+If schemify detects that your current output mode conflicts with existing files
+(e.g. you switch from per-folder `schema.yml` to per-model files, or vice versa),
+it warns you and asks whether to continue.
+
 ## Default template
 
-If `.schemify.yml` is missing, schemify creates this template automatically:
+`.schemify.yml` (created by `schemify --init`) controls which fields appear in
+generated schemas:
 
 ```yaml
 version: '1.0'
