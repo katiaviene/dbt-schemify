@@ -172,29 +172,94 @@ def _fetch_db_columns(manifest_nodes, config):
     return db_cols
 
 
-def _ensure_template(template_path):
-    """Create a default .schemify.yml if it doesn't exist yet."""
-    template_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(template_path, 'w', encoding='utf-8') as f:
-        f.write(DEFAULT_TEMPLATE)
-    print(f"Created default template at {template_path}")
-    print("Edit it to customise which fields schemify generates, then re-run.")
-
-
-def _load_config(project_dir):
-    """Read .schemify-config.yml from project_dir.
-    Creates it with defaults if missing. Returns dict with 'default' normalised to None.
-    """
+def _init(project_dir, template_path):
+    """Create config and template files for first-time setup."""
     config_path = Path(project_dir) / CONFIG_FILE
+    any_created = False
+
     if not config_path.exists():
         with open(config_path, 'w', encoding='utf-8') as f:
             f.write(DEFAULT_CONFIG)
-        print(f"Created config file at {config_path}")
-        print(f"Review it to set your preferred defaults, then re-run.")
+        print(f"Created config:   {config_path}")
+        any_created = True
+    else:
+        print(f"Config already exists:   {config_path}")
+
+    if not template_path.exists():
+        template_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(template_path, 'w', encoding='utf-8') as f:
+            f.write(DEFAULT_TEMPLATE)
+        print(f"Created template: {template_path}")
+        any_created = True
+    else:
+        print(f"Template already exists: {template_path}")
+
+    if any_created:
+        print("\nEdit the files above to configure your setup, then run 'schemify'.")
+    else:
+        print("\nAll files already exist. Run 'schemify' to generate schemas.")
+
+
+def _load_config(project_dir):
+    """Read .schemify-config.yml. Returns None if file doesn't exist.
+    Returns dict with 'default' normalised to None.
+    """
+    config_path = Path(project_dir) / CONFIG_FILE
+    if not config_path.exists():
+        return None
     with open(config_path) as f:
         raw = yaml.safe_load(f) or {}
     # Normalise the 'default' sentinel string to None everywhere
     return {k: (None if v == 'default' else v) for k, v in raw.items()}
+
+
+def _confirm(prompt, auto_yes=False):
+    """Prompt user for Y/n confirmation. Returns True if confirmed."""
+    if auto_yes:
+        print(f"{prompt} [Y/n] Y")
+        return True
+    try:
+        answer = input(f"{prompt} [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    return answer in ('', 'y', 'yes')
+
+
+def _check_schema_pattern_conflicts(groups, mode):
+    """Check for schema pattern mismatches in target directories.
+
+    mode: 'dir' (schema.yml per folder) or 'model' (per-model .yml files).
+    Returns list of (dir_path, description) tuples.
+    """
+    conflicts = []
+
+    if mode == 'dir':
+        # Build map: dir → model names being written there
+        dir_to_nodes = defaultdict(list)
+        for schema_path, nodes in groups.items():
+            dir_to_nodes[schema_path.parent].extend(nodes)
+        for dir_path, nodes in dir_to_nodes.items():
+            if not dir_path.exists():
+                continue
+            model_names = {n['name'] for n in nodes}
+            conflicting = [f for f in dir_path.glob('*.yml') if f.stem in model_names]
+            if conflicting:
+                names = ', '.join(f.name for f in sorted(conflicting))
+                conflicts.append((dir_path, f"per-model files exist: {names}"))
+    else:  # mode == 'model'
+        dirs_seen = set()
+        for schema_path in groups:
+            dir_path = schema_path.parent
+            if dir_path in dirs_seen:
+                continue
+            dirs_seen.add(dir_path)
+            if not dir_path.exists():
+                continue
+            if (dir_path / 'schema.yml').exists():
+                conflicts.append((dir_path, "schema.yml (per-folder pattern) exists"))
+
+    return conflicts
 
 
 def _resolve(cli_val, config_val, hardcoded):
@@ -235,12 +300,29 @@ def main():
                         help='Skip database connection and column fetching.')
     parser.add_argument('--info', action='store_true',
                         help='Show resolved paths and configuration, then exit.')
+    parser.add_argument('--init', action='store_true',
+                        help='Create default .schemify-config.yml and .schemify.yml, then exit.')
+    parser.add_argument('-y', '--yes', action='store_true',
+                        help='Skip confirmation prompts (useful for CI).')
 
     args = parser.parse_args()
     project_dir = Path(args.project_dir).resolve()
 
-    # --- Config file (create if missing, always read) ---
+    # Resolve template path early (needed for --init before config exists)
+    template_path_early = Path(args.template).resolve() if args.template else project_dir / '.schemify.yml'
+
+    # --- --init: create files and exit ---
+    if args.init:
+        _init(project_dir, template_path_early)
+        return
+
+    # --- Config file (must exist; tell user to run --init if missing) ---
     cfg = _load_config(project_dir)
+    if cfg is None:
+        config_path = project_dir / CONFIG_FILE
+        print(f"No config file found at {config_path}.", file=sys.stderr)
+        print("Run 'schemify --init' to create it.", file=sys.stderr)
+        sys.exit(1)
 
     # --- Resolve all options: CLI > config > hardcoded default ---
     each   = _resolve(args.each,       cfg.get('each'),         False)
@@ -251,8 +333,8 @@ def main():
     profile_arg    = args.profile     or cfg.get('profile')     # None → auto
     target_arg     = args.target      or cfg.get('target')      # None → auto
 
-    template_path  = Path(template_arg).resolve()  if template_arg   else project_dir / '.schemify.yml'
-    manifest_path  = Path(manifest_arg).resolve()  if manifest_arg   else project_dir / 'target' / 'manifest.json'
+    template_path  = Path(template_arg).resolve() if template_arg else template_path_early
+    manifest_path  = Path(manifest_arg).resolve() if manifest_arg else project_dir / 'target' / 'manifest.json'
     profiles_dir   = Path(profiles_dir_arg).resolve() if profiles_dir_arg else Path.home() / '.dbt'
 
     dbt_project  = _read_dbt_project(project_dir)
@@ -274,12 +356,9 @@ def main():
 
     # --- Template ---
     if not template_path.exists():
-        if template_arg:
-            print(f"Error: template not found: {template_path}", file=sys.stderr)
-            print("Create a .schemify.yml in your project root or pass --template.", file=sys.stderr)
-            sys.exit(1)
-        _ensure_template(template_path)
-        sys.exit(0)
+        print(f"Error: template not found: {template_path}", file=sys.stderr)
+        print("Run 'schemify --init' to create a default template.", file=sys.stderr)
+        sys.exit(1)
 
     with open(template_path) as f:
         template = yaml.safe_load(f) or {}
@@ -299,6 +378,45 @@ def main():
         manifest_nodes = _apply_selector(manifest_nodes, args.select)
         if not manifest_nodes:
             print(f"Warning: no models matched selector: {args.select}", file=sys.stderr)
+
+    # --- Compute output groups (before DB fetch, so user confirms first) ---
+    template_model = ModelNode(**(template.get('models') or [{}])[0])
+
+    if args.schema:
+        mode = 'explicit'
+        groups = {Path(args.schema): manifest_nodes}
+    elif each or len(manifest_nodes) == 1:
+        mode = 'model'
+        groups = _group_nodes_by_model(manifest_nodes, project_dir)
+    else:
+        mode = 'dir'
+        groups = _group_nodes_by_dir(manifest_nodes, project_dir)
+
+    if not groups:
+        print("No models found to process.", file=sys.stderr)
+        sys.exit(1)
+
+    # --- Confirmation prompt ---
+    print("The following schema files will be created or updated:")
+    for schema_path, nodes in groups.items():
+        model_names = ', '.join(n['name'] for n in nodes)
+        print(f"  {schema_path}  ({model_names})")
+    if not _confirm("Proceed?", auto_yes=args.yes):
+        print("Aborted.")
+        sys.exit(0)
+
+    # --- Pattern conflict check ---
+    if mode in ('dir', 'model'):
+        conflicts = _check_schema_pattern_conflicts(groups, mode)
+        if conflicts:
+            print("Warning: schema pattern mismatch detected:")
+            for dir_path, desc in conflicts:
+                print(f"  {dir_path}: {desc}")
+            mode_hint = "each: false" if mode == 'dir' else "each: true"
+            print(f"Tip: update '{mode_hint}' in {project_dir / CONFIG_FILE} to match your existing files.")
+            if not _confirm("Continue anyway?", auto_yes=args.yes):
+                print("Aborted.")
+                sys.exit(0)
 
     # --- DB columns ---
     db_cols_by_model = {}
@@ -321,28 +439,9 @@ def main():
                 print(f"Warning: DB connection failed — {exc}", file=sys.stderr)
                 print("Proceeding without column information.", file=sys.stderr)
 
-    # --- Merge & write ---
-    template_model = ModelNode(**(template.get('models') or [{}])[0])
-
-    if args.schema:
-        # Explicit output file — all selected models into one schema.yml
-        _write_schema(Path(args.schema), manifest_nodes, template_model, db_cols_by_model)
-    elif each or len(manifest_nodes) == 1:
-        # One <model_name>.yml per model (explicit --each / config each:true, or exactly one model selected)
-        groups = _group_nodes_by_model(manifest_nodes, project_dir)
-        if not groups:
-            print("No models found to process.", file=sys.stderr)
-            sys.exit(1)
-        for schema_path, nodes in groups.items():
-            _write_schema(schema_path, nodes, template_model, db_cols_by_model)
-    else:
-        # Default: one schema.yml per model directory
-        groups = _group_nodes_by_dir(manifest_nodes, project_dir)
-        if not groups:
-            print("No models found to process.", file=sys.stderr)
-            sys.exit(1)
-        for schema_path, nodes in groups.items():
-            _write_schema(schema_path, nodes, template_model, db_cols_by_model)
+    # --- Write ---
+    for schema_path, nodes in groups.items():
+        _write_schema(schema_path, nodes, template_model, db_cols_by_model)
 
 
 if __name__ == '__main__':

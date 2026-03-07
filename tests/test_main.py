@@ -2,12 +2,15 @@ from pathlib import Path
 
 from dbt_schemify.main import (
     _apply_selector,
+    _check_schema_pattern_conflicts,
     _group_nodes_by_dir,
     _group_nodes_by_model,
+    _init,
     _load_config,
     _resolve,
     CONFIG_FILE,
     DEFAULT_CONFIG,
+    DEFAULT_TEMPLATE,
 )
 
 
@@ -212,30 +215,8 @@ class TestResolve:
 # ---------------------------------------------------------------------------
 
 class TestLoadConfig:
-    def test_creates_config_file_if_missing(self, tmp_path):
-        cfg = _load_config(tmp_path)
-        assert (tmp_path / CONFIG_FILE).exists()
-        # Returns a dict
-        assert isinstance(cfg, dict)
-
-    def test_created_file_contains_expected_keys(self, tmp_path):
-        _load_config(tmp_path)
-        text = (tmp_path / CONFIG_FILE).read_text()
-        assert 'each' in text
-        assert 'no_db' in text
-        assert 'manifest' in text
-
-    def test_default_sentinel_normalised_to_none(self, tmp_path):
-        cfg = _load_config(tmp_path)
-        # 'default' strings in DEFAULT_CONFIG should become None
-        assert cfg.get('manifest') is None
-        assert cfg.get('profile') is None
-        assert cfg.get('target') is None
-
-    def test_bool_defaults_preserved(self, tmp_path):
-        cfg = _load_config(tmp_path)
-        assert cfg.get('each') is False
-        assert cfg.get('no_db') is False
+    def test_returns_none_when_missing(self, tmp_path):
+        assert _load_config(tmp_path) is None
 
     def test_reads_existing_config(self, tmp_path):
         (tmp_path / CONFIG_FILE).write_text('each: true\nno_db: false\n')
@@ -243,12 +224,115 @@ class TestLoadConfig:
         assert cfg.get('each') is True
         assert cfg.get('no_db') is False
 
+    def test_default_sentinel_normalised_to_none(self, tmp_path):
+        (tmp_path / CONFIG_FILE).write_text(DEFAULT_CONFIG)
+        cfg = _load_config(tmp_path)
+        assert cfg.get('manifest') is None
+        assert cfg.get('profile') is None
+        assert cfg.get('target') is None
+
+    def test_bool_defaults_preserved(self, tmp_path):
+        (tmp_path / CONFIG_FILE).write_text(DEFAULT_CONFIG)
+        cfg = _load_config(tmp_path)
+        assert cfg.get('each') is False
+        assert cfg.get('no_db') is False
+
     def test_custom_value_not_normalised(self, tmp_path):
         (tmp_path / CONFIG_FILE).write_text('profile: my_profile\n')
         cfg = _load_config(tmp_path)
         assert cfg.get('profile') == 'my_profile'
 
-    def test_default_config_content_matches_constant(self, tmp_path):
-        _load_config(tmp_path)
-        written = (tmp_path / CONFIG_FILE).read_text()
-        assert written == DEFAULT_CONFIG
+
+# ---------------------------------------------------------------------------
+# _init
+# ---------------------------------------------------------------------------
+
+class TestInit:
+    def test_creates_config_if_missing(self, tmp_path):
+        _init(tmp_path, tmp_path / '.schemify.yml')
+        assert (tmp_path / CONFIG_FILE).exists()
+
+    def test_creates_template_if_missing(self, tmp_path):
+        template_path = tmp_path / '.schemify.yml'
+        _init(tmp_path, template_path)
+        assert template_path.exists()
+
+    def test_created_config_content_matches_constant(self, tmp_path):
+        _init(tmp_path, tmp_path / '.schemify.yml')
+        assert (tmp_path / CONFIG_FILE).read_text() == DEFAULT_CONFIG
+
+    def test_created_template_content_matches_constant(self, tmp_path):
+        template_path = tmp_path / '.schemify.yml'
+        _init(tmp_path, template_path)
+        assert template_path.read_text() == DEFAULT_TEMPLATE
+
+    def test_skips_existing_config(self, tmp_path):
+        config_path = tmp_path / CONFIG_FILE
+        config_path.write_text('custom: content\n')
+        _init(tmp_path, tmp_path / '.schemify.yml')
+        assert config_path.read_text() == 'custom: content\n'
+
+    def test_skips_existing_template(self, tmp_path):
+        template_path = tmp_path / '.schemify.yml'
+        template_path.write_text('custom: template\n')
+        _init(tmp_path, template_path)
+        assert template_path.read_text() == 'custom: template\n'
+
+
+# ---------------------------------------------------------------------------
+# _check_schema_pattern_conflicts
+# ---------------------------------------------------------------------------
+
+class TestCheckSchemaPatternConflicts:
+    def test_dir_mode_detects_per_model_files(self, tmp_path):
+        model_dir = tmp_path / 'models' / 'marketing'
+        model_dir.mkdir(parents=True)
+        (model_dir / 'orders.yml').write_text('name: orders\n')
+        groups = {model_dir / 'schema.yml': [{'name': 'orders'}]}
+        conflicts = _check_schema_pattern_conflicts(groups, 'dir')
+        assert len(conflicts) == 1
+        assert conflicts[0][0] == model_dir
+
+    def test_dir_mode_no_conflict_when_only_schema_yml(self, tmp_path):
+        model_dir = tmp_path / 'models'
+        model_dir.mkdir()
+        (model_dir / 'schema.yml').write_text('')
+        groups = {model_dir / 'schema.yml': [{'name': 'orders'}]}
+        conflicts = _check_schema_pattern_conflicts(groups, 'dir')
+        assert conflicts == []
+
+    def test_dir_mode_no_conflict_when_yml_not_a_model_name(self, tmp_path):
+        model_dir = tmp_path / 'models'
+        model_dir.mkdir()
+        (model_dir / 'sources.yml').write_text('')  # not a model name
+        groups = {model_dir / 'schema.yml': [{'name': 'orders'}]}
+        conflicts = _check_schema_pattern_conflicts(groups, 'dir')
+        assert conflicts == []
+
+    def test_model_mode_detects_schema_yml(self, tmp_path):
+        model_dir = tmp_path / 'models'
+        model_dir.mkdir()
+        (model_dir / 'schema.yml').write_text('')
+        groups = {model_dir / 'orders.yml': [{'name': 'orders'}]}
+        conflicts = _check_schema_pattern_conflicts(groups, 'model')
+        assert len(conflicts) == 1
+        assert conflicts[0][0] == model_dir
+
+    def test_model_mode_no_conflict_when_no_schema_yml(self, tmp_path):
+        model_dir = tmp_path / 'models'
+        model_dir.mkdir()
+        groups = {model_dir / 'orders.yml': [{'name': 'orders'}]}
+        conflicts = _check_schema_pattern_conflicts(groups, 'model')
+        assert conflicts == []
+
+    def test_no_conflict_when_dir_does_not_exist(self, tmp_path):
+        model_dir = tmp_path / 'nonexistent'
+        groups = {model_dir / 'schema.yml': [{'name': 'orders'}]}
+        conflicts = _check_schema_pattern_conflicts(groups, 'dir')
+        assert conflicts == []
+
+    def test_model_mode_no_conflict_nonexistent_dir(self, tmp_path):
+        model_dir = tmp_path / 'nonexistent'
+        groups = {model_dir / 'orders.yml': [{'name': 'orders'}]}
+        conflicts = _check_schema_pattern_conflicts(groups, 'model')
+        assert conflicts == []
