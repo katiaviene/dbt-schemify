@@ -304,6 +304,8 @@ def main():
                         help='Create default .schemify-config.yml and .schemify.yml, then exit.')
     parser.add_argument('-y', '--yes', action='store_true',
                         help='Skip confirmation prompts (useful for CI).')
+    parser.add_argument('--debug-db', action='store_true',
+                        help='Show resolved DB connection config and test the connection, then exit.')
 
     args = parser.parse_args()
     project_dir = Path(args.project_dir).resolve()
@@ -352,6 +354,28 @@ def main():
         print(f"target       : {target_arg or '(default)'}")
         print(f"each         : {each}")
         print(f"no-db        : {no_db}")
+        return
+
+    # --- --debug-db mode ---
+    if args.debug_db:
+        resolved_profile = profile_arg or dbt_project.get('profile')
+        if not resolved_profile:
+            print(
+                "Error: no profile name found. Pass --profile or set 'profile' in dbt_project.yml.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        try:
+            from dbt_schemify.db_connector import read_connection_config, debug_connection
+            db_config = read_connection_config(resolved_profile, target_arg, profiles_dir_arg)
+            print(f"Profile      : {resolved_profile}")
+            print(f"Target       : {target_arg or '(default)'}")
+            print(f"Profiles dir : {profiles_dir}")
+            print()
+            debug_connection(db_config)
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
         return
 
     # --- Template ---
