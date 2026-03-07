@@ -1,13 +1,28 @@
+SENTINEL = 'schemify'
+
+
+def _empty(val):
+    return val is None or val == '' or val == []
+
+
+def _serialize(val):
+    if isinstance(val, Node):
+        return val.to_dict()
+    elif isinstance(val, list):
+        serialized = [_serialize(v) for v in val]
+        return serialized if serialized else None
+    else:
+        return val
+
+
 class Node:
-    _fields = []
-    _field_types = {}
+    _fields = []      # field ordering hint for serialization
+    _field_types = {} # field -> child Node class for auto-conversion
 
     def __init__(self, **kwargs):
-        for key in self._fields:
-            value = kwargs.get(key)
+        for key, value in kwargs.items():
             type_hint = self._field_types.get(key)
-
-            if type_hint:
+            if type_hint and value is not None:
                 if isinstance(value, list):
                     setattr(self, key, [type_hint(**v) if isinstance(v, dict) else v for v in value])
                 elif isinstance(value, dict):
@@ -19,9 +34,35 @@ class Node:
                     setattr(self, key, value)
             else:
                 setattr(self, key, value)
+        # ensure declared fields have a default of None if not provided
+        for key in self._fields:
+            if not hasattr(self, key):
+                setattr(self, key, None)
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
+    def field_items(self):
+        """Yield (field, value) in _fields order first, then any extra fields."""
+        seen = set()
+        for field in self._fields:
+            seen.add(field)
+            yield field, getattr(self, field, None)
+        for key, val in self.__dict__.items():
+            if key not in seen and not key.startswith('_'):
+                yield key, val
+
+    def to_dict(self):
+        result = {}
+        for field, val in self.field_items():
+            if not _empty(val):
+                serialized = _serialize(val)
+                if not _empty(serialized):
+                    result[field] = serialized
+        return result
 
     def __repr__(self):
-        fields = ", ".join(f"{f}={repr(getattr(self, f))}" for f in self._fields)
+        fields = ", ".join(f"{f}={repr(getattr(self, f, None))}" for f in self._fields)
         return f"{self.__class__.__name__}({fields})"
 
 
@@ -30,7 +71,8 @@ class ColumnNode(Node):
     _field_types = {}
 
 class ConfigNode(Node):
-    _fields = ["enabled", "materialized", "tags", "schema", "database", "alias", "persist_docs", "contract", "full_refresh", "pre-hook", "post-hook"]
+    _fields = ["enabled", "materialized", "tags", "schema", "database", "alias",
+               "persist_docs", "contract", "full_refresh", "pre-hook", "post-hook"]
     _field_types = {}
 
 class ModelNode(Node):

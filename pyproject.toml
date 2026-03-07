@@ -27,6 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev       = ["pytest"]
 postgres  = ["psycopg2-binary"]
 redshift  = ["psycopg2-binary"]
 snowflake = ["snowflake-connector-python"]

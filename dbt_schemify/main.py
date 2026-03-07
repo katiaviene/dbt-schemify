@@ -24,7 +24,8 @@ from pathlib import Path
 import yaml
 
 from dbt_schemify.schema_editor import CustomDumper
-from dbt_schemify.merger import merge_schema
+from dbt_schemify.dbt_ast import ModelNode
+from dbt_schemify.transformation import SchemifyTransformer
 
 
 def _read_dbt_project(project_dir):
@@ -143,10 +144,22 @@ def main():
                 print("Proceeding without column information.", file=sys.stderr)
 
     # --- Merge & write ---
-    result = merge_schema(template, existing_schema, manifest_nodes, db_cols_by_model)
+    template_model = ModelNode(**(template.get('models') or [{}])[0])
+    existing_by_name = {
+        m['name']: ModelNode(**m)
+        for m in existing_schema.get('models', [])
+    }
+    transformer = SchemifyTransformer(
+        template_model,
+        existing_by_name,
+        manifest_nodes,
+        db_cols_by_model,
+    )
+    result = transformer.run(existing_version=existing_schema.get('version', 2))
+
     schema_path.parent.mkdir(parents=True, exist_ok=True)
     with open(schema_path, 'w', encoding='utf-8') as f:
-        yaml.dump(result, f, default_flow_style=False, Dumper=CustomDumper,
+        yaml.dump(result.to_dict(), f, default_flow_style=False, Dumper=CustomDumper,
                   sort_keys=False, allow_unicode=True)
     print(f"Schema written to {schema_path}")
 
