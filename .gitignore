@@ -1,5 +1,11 @@
-myvenv
-.venv
+myvenv/
+.venv/
 __pycache__/
 *.pyc
 *.egg-info/
+dist/
+build/
+.eggs/
+test_output/
+target/
+logs/
