@@ -2,23 +2,26 @@
 dbt-schemify CLI
 
 Usage:
-  dbt-schemify --schema models/example/schema.yml
+  dbt-schemify                         # auto-discover: writes schema.yml next to each model
+  dbt-schemify --schema path/schema.yml  # explicit: write all selected models into one file
 
 All options:
-  --schema         PATH   Path to schema.yml to generate/update (required)
+  --schema         PATH   Path to schema.yml to write (optional; default: auto-discover from manifest)
   --manifest       PATH   Path to manifest.json (default: ./target/manifest.json)
   --template       PATH   Path to .schemify.yml template (default: ./.schemify.yml)
   --project-dir    DIR    dbt project root (default: current directory)
   --profile        NAME   dbt profile name (default: read from dbt_project.yml)
   --target         NAME   dbt target (default: profile default)
   --profiles-dir   DIR    Directory containing profiles.yml (default: ~/.dbt/)
-  --models         NAME   Only process these model names (space-separated)
+  -s / --select    SELECTOR  Filter models (space-separated). Supports model names and tag:value.
+                             Examples: -s my_model   -s tag:marketing   -s tag:finance orders
   --no-db                 Skip database connection; no column fetching
 """
 
 import argparse
 import json
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import yaml
@@ -46,6 +49,63 @@ def _read_manifest_nodes(manifest_path):
     ]
 
 
+def _apply_selector(manifest_nodes, selectors):
+    """Filter nodes by dbt-style selectors: model names or tag:<value>."""
+    result = []
+    for node in manifest_nodes:
+        for sel in selectors:
+            if sel.startswith('tag:'):
+                tag = sel[4:]
+                if tag in (node.get('tags') or []):
+                    result.append(node)
+                    break
+            else:
+                if node['name'] == sel:
+                    result.append(node)
+                    break
+    return result
+
+
+def _group_nodes_by_dir(manifest_nodes, project_dir):
+    """Group manifest nodes by the directory of their SQL file.
+    Returns dict: schema_path -> list of nodes.
+    """
+    groups = defaultdict(list)
+    for node in manifest_nodes:
+        file_path = node.get('original_file_path')
+        if not file_path:
+            print(f"Warning: no original_file_path for model '{node.get('name')}', skipping.", file=sys.stderr)
+            continue
+        schema_path = Path(project_dir) / Path(file_path).parent / 'schema.yml'
+        groups[schema_path].append(node)
+    return groups
+
+
+def _write_schema(schema_path, nodes, template_model, db_cols_by_model):
+    existing_schema = {}
+    if schema_path.exists():
+        with open(schema_path) as f:
+            existing_schema = yaml.safe_load(f) or {}
+
+    existing_by_name = {
+        m['name']: ModelNode(**m)
+        for m in existing_schema.get('models', [])
+    }
+    transformer = SchemifyTransformer(
+        template_model,
+        existing_by_name,
+        nodes,
+        db_cols_by_model,
+    )
+    result = transformer.run(existing_version=existing_schema.get('version', 2))
+
+    schema_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(schema_path, 'w', encoding='utf-8') as f:
+        yaml.dump(result.to_dict(), f, default_flow_style=False, Dumper=CustomDumper,
+                  sort_keys=False, allow_unicode=True)
+    print(f"Schema written to {schema_path}")
+
+
 def _fetch_db_columns(manifest_nodes, config):
     from dbt_schemify.db_connector import get_columns
     db_cols = {}
@@ -65,8 +125,8 @@ def main():
         prog='dbt-schemify',
         description='Generate and update dbt schema.yml files.',
     )
-    parser.add_argument('--schema', required=True,
-                        help='Path to schema.yml to generate or update.')
+    parser.add_argument('--schema',
+                        help='Path to schema.yml to write. If omitted, schema.yml is created next to each model.')
     parser.add_argument('--manifest',
                         help='Path to manifest.json. Default: <project-dir>/target/manifest.json')
     parser.add_argument('--template',
@@ -79,8 +139,8 @@ def main():
                         help='dbt target (e.g. dev, prod). Default: profile default.')
     parser.add_argument('--profiles-dir',
                         help='Directory containing profiles.yml. Default: ~/.dbt/')
-    parser.add_argument('--models', nargs='+', metavar='MODEL',
-                        help='Only process these model names.')
+    parser.add_argument('-s', '--select', nargs='+', metavar='SELECTOR',
+                        help='Filter models. Supports model names and tag:value (e.g. -s tag:marketing orders).')
     parser.add_argument('--no-db', action='store_true',
                         help='Skip database connection and column fetching.')
 
@@ -108,18 +168,10 @@ def main():
     manifest_nodes = _read_manifest_nodes(manifest_path)
 
     # --- Filter models ---
-    if args.models:
-        keep = set(args.models)
-        manifest_nodes = [n for n in manifest_nodes if n['name'] in keep]
+    if args.select:
+        manifest_nodes = _apply_selector(manifest_nodes, args.select)
         if not manifest_nodes:
-            print(f"Warning: none of the specified models found in manifest: {args.models}", file=sys.stderr)
-
-    # --- Existing schema ---
-    schema_path = Path(args.schema)
-    existing_schema = {}
-    if schema_path.exists():
-        with open(schema_path) as f:
-            existing_schema = yaml.safe_load(f) or {}
+            print(f"Warning: no models matched selector: {args.select}", file=sys.stderr)
 
     # --- DB columns ---
     db_cols_by_model = {}
@@ -145,23 +197,18 @@ def main():
 
     # --- Merge & write ---
     template_model = ModelNode(**(template.get('models') or [{}])[0])
-    existing_by_name = {
-        m['name']: ModelNode(**m)
-        for m in existing_schema.get('models', [])
-    }
-    transformer = SchemifyTransformer(
-        template_model,
-        existing_by_name,
-        manifest_nodes,
-        db_cols_by_model,
-    )
-    result = transformer.run(existing_version=existing_schema.get('version', 2))
 
-    schema_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(schema_path, 'w', encoding='utf-8') as f:
-        yaml.dump(result.to_dict(), f, default_flow_style=False, Dumper=CustomDumper,
-                  sort_keys=False, allow_unicode=True)
-    print(f"Schema written to {schema_path}")
+    if args.schema:
+        # Explicit output file — all selected models into one schema.yml
+        _write_schema(Path(args.schema), manifest_nodes, template_model, db_cols_by_model)
+    else:
+        # Auto-discover: one schema.yml per model directory
+        groups = _group_nodes_by_dir(manifest_nodes, project_dir)
+        if not groups:
+            print("No models found to process.", file=sys.stderr)
+            sys.exit(1)
+        for schema_path, nodes in groups.items():
+            _write_schema(schema_path, nodes, template_model, db_cols_by_model)
 
 
 if __name__ == '__main__':

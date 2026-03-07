@@ -57,18 +57,20 @@ dbt compile
 **3. Run dbt-schemify:**
 
 ```bash
-dbt-schemify --schema models/my_folder/schema.yml
+dbt-schemify
 ```
 
 Reads `.schemify.yml`, `target/manifest.json`, and `~/.dbt/profiles.yml` automatically.
+Writes `schema.yml` next to each model's SQL file.
 
 ## Usage
 
 ```
-dbt-schemify --schema PATH [options]
+dbt-schemify [options]
 
 Options:
-  --schema PATH          Path to schema.yml to generate or update (required)
+  --schema PATH          Write all models into a single schema.yml at PATH.
+                         If omitted, a schema.yml is created next to each model's SQL file.
   --manifest PATH        Path to manifest.json
                          Default: <project-dir>/target/manifest.json
   --template PATH        Path to .schemify.yml template
@@ -77,25 +79,34 @@ Options:
   --profile NAME         dbt profile name. Default: read from dbt_project.yml
   --target NAME          dbt target (e.g. dev, prod). Default: profile default
   --profiles-dir DIR     Directory containing profiles.yml. Default: ~/.dbt/
-  --models MODEL ...     Only process specific model names
+  -s / --select          Filter models by name or tag. Space-separated.
+                         Examples: -s orders   -s tag:marketing   -s tag:finance orders
   --no-db                Skip database connection; no column fetching
 ```
 
 ## Examples
 
 ```bash
-# Generate schema without DB (manifest data only)
-dbt-schemify --schema models/example/schema.yml --no-db
+# Auto-discover: write schema.yml next to every model's SQL file
+dbt-schemify
 
-# Generate schema with DB columns
-dbt-schemify --schema models/example/schema.yml --profile my_profile --target dev
+# Only models with a specific tag (one schema.yml per directory)
+dbt-schemify -s tag:marketing
 
-# Only specific models
-dbt-schemify --schema models/example/schema.yml --models my_model_a my_model_b --no-db
+# Only specific models by name
+dbt-schemify -s orders customers
+
+# Mix names and tags
+dbt-schemify -s tag:finance orders
+
+# All matching models into one explicit file
+dbt-schemify --schema models/marketing/schema.yml -s tag:marketing
+
+# Without DB connection (manifest data only)
+dbt-schemify --no-db
 
 # Custom paths
 dbt-schemify \
-  --schema models/example/schema.yml \
   --manifest target/manifest.json \
   --template .schemify.yml
 ```
