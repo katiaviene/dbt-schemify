@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dbt-schemify"
-version = "0.7.0"
+version = "0.8.0"
 description = "Generate and update dbt schema.yml files from a template, manifest, and database"
 readme = "README.md"
 license = {file = "LICENSE"}

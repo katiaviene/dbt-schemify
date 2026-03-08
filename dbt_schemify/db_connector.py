@@ -217,9 +217,10 @@ def _columns_snowflake(config, database, schema, table):
         'account':   config.get('account'),
         'user':      config.get('user'),
         'warehouse': config.get('warehouse'),
+        'password': config.get('password'),
         'database':  database,
         'schema':    schema,
-        'role':      config.get('role'),
+        'role':      config.get('role')
     }
     authenticator = (config.get('authenticator') or '').lower()
     if authenticator and authenticator != 'snowflake':
