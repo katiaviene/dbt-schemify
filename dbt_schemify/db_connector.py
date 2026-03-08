@@ -105,7 +105,8 @@ def _test_snowflake(config):
         'schema':    config.get('schema'),
         'role':      config.get('role'),
     }
-    if config.get('authenticator'):
+    authenticator = (config.get('authenticator') or '').lower()
+    if authenticator and authenticator != 'snowflake':
         connect_kwargs['authenticator'] = config['authenticator']
     elif config.get('private_key_path'):
         connect_kwargs['private_key_path'] = config['private_key_path']
@@ -220,7 +221,8 @@ def _columns_snowflake(config, database, schema, table):
         'schema':    schema,
         'role':      config.get('role'),
     }
-    if config.get('authenticator'):
+    authenticator = (config.get('authenticator') or '').lower()
+    if authenticator and authenticator != 'snowflake':
         connect_kwargs['authenticator'] = config['authenticator']
     elif config.get('private_key_path'):
         connect_kwargs['private_key_path'] = config['private_key_path']
